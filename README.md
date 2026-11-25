@@ -1,28 +1,80 @@
-# GitHub Pages password-gated file directory
+# Password-gated GitHub Pages download directory (GitHub Releases storage)
 
-A lightweight file listing website that reads files from `share/`, displays them grouped by subdirectories, and lets visitors download individual files. The page is encrypted with StatiCrypt in GitHub Actions.
+This light-theme website uses StatiCrypt to password-gate its interface and reads downloadable assets from one GitHub Release. Large `.7z` files are **not committed to the Git repository**; publish them directly from your computer with `publish-release.sh`.
 
-## Important privacy/security note
+## Important security notes
 
-StatiCrypt password-protects the **HTML page**, not the downloadable files. Because GitHub Pages is static hosting and `share/` is published as ordinary files, direct download URLs are public and anyone who knows/guesses the URL can download them without the page password. Do not put confidential files here unless you separately encrypt each file before committing it. GitHub Pages websites are public-facing.
+- StatiCrypt protects the website interface only. GitHub Release asset URLs are public to anyone who has them.
+- Put only already-encrypted archives (for example, 7z files using AES-256 and encrypted filenames) in the release if the contents must remain private. Use a strong archive password, preferably different from the website password.
+- GitHub Releases are distribution hosting, not private authenticated storage. Anyone who obtains an asset URL can download the encrypted archive.
+- The website discovers assets through the public GitHub Releases API. GitHub's unauthenticated API rate limit can occasionally affect loading.
 
-## Create the free GitHub account
-1. Go to https://github.com/signup and create an account; verify your email.
-2. Choose a free account/plan (no paid subscription needed for public GitHub Pages).
+## 1. Create the GitHub repository and Pages site
 
-## Create and publish repository
-1. Create a **public** repository, e.g. `private-download-page` (public repo is required for GitHub Free Pages).
-2. Upload these template files to the repository root, including `.github/workflows/pages.yml`.
-3. Add the files you want to share under `share/`; create subdirectories as desired, e.g. `share/Photos/`, `share/Docs/`.
-4. In repository **Settings → Secrets and variables → Actions → New repository secret**, add:
-   - `SITE_PASSWORD`: strong password for StatiCrypt page.
-   - `STATICRYPT_SALT`: 32-character random salt. Generate one locally with Python: `python -c "import secrets; print(secrets.token_hex(16))"`. This is not a password; keep it stable between builds.
-5. Go to **Settings → Pages** and set **Build and deployment → Source: GitHub Actions**.
-6. Push changes to the `main` branch or run the workflow manually from **Actions**.
-7. When workflow completes, Pages URL is shown in the deployment output and under Settings → Pages.
+1. Create a GitHub account at https://github.com/signup.
+2. Create a **public** repository (GitHub Free supports Pages for public repositories).
+3. Upload the template files, including `.github/workflows/pages.yml` and `publish-release.sh`.
+4. Add repository Actions secrets under **Settings → Secrets and variables → Actions**:
+   - `SITE_PASSWORD`: password for the StatiCrypt website.
+   - `STATICRYPT_SALT`: stable random 32-character hexadecimal salt. Generate with `python -c "import secrets; print(secrets.token_hex(16))"`.
+5. Under **Settings → Pages**, set **Build and deployment → Source** to **GitHub Actions**.
+6. Push to `main` or run **Build and deploy GitHub Pages** from the Actions tab.
 
-## Updating files
-Commit/push changes to `share/`. Workflow rebuilds the index and republishes.
+The Pages workflow publishes only the website files. It deliberately does not copy `share/` into the Pages artifact.
 
-## Local preview (without password gate)
-Run `node build-manifest.mjs`, then serve the project folder with any local HTTP server (for example `python -m http.server 8000`). Open `http://localhost:8000`. StatiCrypt encrypted version is created only in the GitHub Actions deploy.
+## 2. Publish large files to GitHub Releases (from your computer)
+
+Install:
+- GitHub CLI: https://cli.github.com/
+- Git: https://git-scm.com/downloads
+- Python 3 (used to encode folder names in asset filenames)
+
+Authenticate once:
+
+```bash
+gh auth login
+```
+
+Put downloadable archives in `share/`, retaining the directory structure:
+
+```text
+share/
+├── program-server/
+│   └── my-program.7z
+└── program-client/
+    └── my-program-1.39.0.7z
+```
+
+Run from the repository root:
+
+```bash
+./publish-release.sh
+```
+
+The script creates or updates the release tagged `shared-files` and uploads each file as a release asset. Folder separators are encoded as `__`, so the example becomes `program-server__my-program.7z` and `program-client__my-program-1.39.0.7z`. The website reconstructs the folder hierarchy from these names.
+
+On Windows, run the script from Git Bash or WSL. You can change the release tag/title with environment variables, e.g. `RELEASE_TAG=shared-files RELEASE_TITLE="Shared downloads" ./publish-release.sh`.
+
+**Updating/removing assets:** `--clobber` replaces an asset when its encoded name is unchanged. The script does not automatically delete release assets whose local files were removed; delete those obsolete assets from the release's GitHub page.
+
+## 3. Stop tracking the old large files in Git
+
+If you previously committed files under `share/`, first publish them with the script above. Then remove them from Git tracking while keeping your local copies:
+
+```bash
+git rm -r --cached share
+echo "/share/" >> .gitignore
+git add .gitignore
+git commit -m "Store downloadable archives in GitHub Releases"
+git push
+```
+
+This stops future commits from adding the files, but **does not erase the large blobs from existing Git history**. If you need to reduce repository size, history must be rewritten (for example with `git filter-repo`), which affects every clone and should be done carefully. If you want to keep using `share/` as a local publishing folder, leave it on disk; `.gitignore` prevents accidental commits.
+
+## 4. Updating the website
+
+Push changes to the website files as usual. The Pages workflow deploys the light-theme website. To update downloads, add/replace files under local `share/` and run `./publish-release.sh` again. The site reads the release assets automatically; no website rebuild is needed after a release upload.
+
+## Local preview
+
+The website fetches the public release API, so it needs to be served over HTTP and configured with a `config.json` file. For a quick preview, create `config.json` containing your repository and release tag, then run `python -m http.server 8000`.

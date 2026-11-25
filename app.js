@@ -1,6 +1,4 @@
-const $ = (s) => document.querySelector(s);
-let manifest = [],
-  current = "";
+const $ = (selector) => document.querySelector(selector);
 const fmtBytes = (n) =>
   n < 1024
     ? `${n} B`
@@ -9,46 +7,8 @@ const fmtBytes = (n) =>
       : n < 1073741824
         ? `${(n / 1048576).toFixed(1)} MB`
         : `${(n / 1073741824).toFixed(2)} GB`;
-const cleanPath = (p) => p.split("/").filter(Boolean).join("/");
-function render() {
-  const search = $("#search").value.toLowerCase();
-  let dirs = new Set(),
-    files = [];
-  manifest.forEach((item) => {
-    let p = item.path;
-    if (!p.startsWith(current ? current + "/" : "")) return;
-    let rest = p.slice(current ? current.length + 1 : 0);
-    if (!rest) return;
-    let parts = rest.split("/");
-    if (parts.length > 1) {
-      if (!search || parts[0].toLowerCase().includes(search))
-        dirs.add(parts[0]);
-    } else if (!search || p.toLowerCase().includes(search)) files.push(item);
-  });
-  let html = [...dirs]
-    .sort((a, b) => a.localeCompare(b))
-    .map(
-      (d) =>
-        `<div class="entry"><span class="kind">📁</span><span class="name"><a href="#" data-dir="${encodeURIComponent(cleanPath(current + "/" + d))}">${esc(d)}</a></span><span class="meta">pasta</span></div>`,
-    )
-    .join("");
-  html += files
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map(
-      (f) =>
-        `<div class="entry"><span class="kind">📄</span><span class="name"><a href="${encodeURI(f.url)}" download>${esc(f.name)}</a></span><span class="meta">${fmtBytes(f.size)}</span></div>`,
-    )
-    .join("");
-  $("#list").innerHTML =
-    html || '<div class="empty">Nenhum arquivo ou pasta aqui.</div>';
-  $("#crumb").innerHTML = current
-    ? `<a href="#" data-dir="">Home</a> / ${current.split("/").map(esc).join(" / ")}`
-    : "<span>Todos arquivos</span>";
-  $("#up").disabled = !current;
-  $("#foot").textContent = `${manifest.length} arquivos indexado`;
-}
-function esc(s) {
-  return s.replace(
+const esc = (s) =>
+  String(s).replace(
     /[&<>"']/g,
     (c) =>
       ({
@@ -59,37 +19,126 @@ function esc(s) {
         "'": "&#39;",
       })[c],
   );
+let files = [],
+  current = "",
+  allReleasesUrl = "";
+
+function render() {
+  const query = $("#search").value.trim().toLowerCase();
+  const prefix = current ? `${current}/` : "";
+  const dirs = new Set();
+  const visibleFiles = [];
+  for (const file of files) {
+    if (!file.path.startsWith(prefix)) continue;
+    const rest = file.path.slice(prefix.length);
+    if (!rest) continue;
+    const parts = rest.split("/");
+    if (parts.length > 1) {
+      if (!query || parts[0].toLowerCase().includes(query)) dirs.add(parts[0]);
+    } else if (!query || file.path.toLowerCase().includes(query))
+      visibleFiles.push(file);
+  }
+  let html = [...dirs]
+    .sort((a, b) => a.localeCompare(b))
+    .map(
+      (dir) =>
+        `<div class="entry"><span class="kind">📁</span><span class="name"><a href="#" data-dir="${encodeURIComponent(current ? `${current}/${dir}` : dir)}">${esc(dir)}</a></span><span class="meta">Pasta</span></div>`,
+    )
+    .join("");
+  html += visibleFiles
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(
+      (file) =>
+        `<div class="entry"><span class="kind">📦</span><span class="name"><a href="${esc(file.url)}" rel="noopener">${esc(file.name)}</a></span><span class="meta">${fmtBytes(file.size)}</span></div>`,
+    )
+    .join("");
+  $("#list").innerHTML =
+    html || '<div class="empty">Nenhum arquivo ou pasta aqui.</div>';
+  $("#crumb").innerHTML = current
+    ? `<a href="#" data-dir="">Home</a> / ${current.split("/").map(esc).join(" / ")}`
+    : "<span>Todos arquivos</span>";
+  $("#up").disabled = !current;
+  $("#foot").textContent =
+    `${files.length} arquivos para downlaod · hosted como GitHub Release assets`;
 }
-$("#list").addEventListener("click", (e) => {
-  let a = e.target.closest("[data-dir]");
-  if (a) {
-    e.preventDefault();
-    current = decodeURIComponent(a.dataset.dir);
-    $("#search").value = "";
-    render();
-  }
-});
-$("#crumb").addEventListener("click", (e) => {
-  let a = e.target.closest("[data-dir]");
-  if (a) {
-    e.preventDefault();
-    current = decodeURIComponent(a.dataset.dir);
-    render();
-  }
-});
-$("#up").onclick = () => {
-  current = current.split("/").slice(0, -1).join("/");
+
+function navigate(path) {
+  current = path;
+  $("#search").value = "";
   render();
-};
-$("#search").oninput = render;
-fetch("files.json")
-  .then((r) => r.json())
-  .then((data) => {
-    manifest = data;
+}
+$("#list").addEventListener("click", (event) => {
+  const link = event.target.closest("[data-dir]");
+  if (!link) return;
+  event.preventDefault();
+  navigate(decodeURIComponent(link.dataset.dir));
+});
+$("#crumb").addEventListener("click", (event) => {
+  const link = event.target.closest("[data-dir]");
+  if (!link) return;
+  event.preventDefault();
+  navigate(decodeURIComponent(link.dataset.dir));
+});
+$("#up").addEventListener("click", () =>
+  navigate(current.split("/").slice(0, -1).join("/")),
+);
+$("#search").addEventListener("input", render);
+
+async function loadFiles() {
+  $("#list").innerHTML = '<div class="empty">Loading release files…</div>';
+  try {
+    const configResponse = await fetch("config.json", { cache: "no-store" });
+    if (!configResponse.ok)
+      throw new Error("Could not load site configuration.");
+    const config = await configResponse.json();
+    const owner = config.repository.split("/")[0];
+    const repo = config.repository.split("/")[1];
+    const api = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=100`;
+    const response = await fetch(api, {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!response.ok)
+      throw new Error(
+        response.status === 403
+          ? "GitHub API rate limit reached. Please try again later."
+          : `GitHub Releases API returned ${response.status}.`,
+      );
+    const releases = await response.json();
+    const release = releases.find(
+      (item) => item.tag_name === config.releaseTag,
+    );
+    if (!release)
+      throw new Error(
+        `Release "${config.releaseTag}" was not found. Upload archives using the publish script.`,
+      );
+    files = release.assets
+      .map((asset) => {
+        const encoded = asset.name.replace(/\.[^.]+$/, "");
+        const parts = encoded.split("__").map((part) => {
+          try {
+            return decodeURIComponent(part);
+          } catch {
+            return part;
+          }
+        });
+        const path = parts.join("/");
+        return {
+          path,
+          name: parts[parts.length - 1],
+          size: asset.size,
+          url: asset.browser_download_url,
+        };
+      })
+      .filter((file) => file.path && file.name)
+      .sort((a, b) => a.path.localeCompare(b.path));
+    if (!files.length)
+      throw new Error(
+        "No downloadable assets found in the configured release.",
+      );
     render();
-  })
-  .catch(
-    () =>
-      ($("#list").innerHTML =
-        '<div class="empty">Não foi possível carregar a lista de arquivos.</div>'),
-  );
+  } catch (error) {
+    $("#list").innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+    $("#foot").textContent = "Não foi possível carregar downloads";
+  }
+}
+loadFiles();
