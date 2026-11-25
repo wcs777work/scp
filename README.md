@@ -7,7 +7,7 @@ This light-theme website uses StatiCrypt to password-gate its interface and read
 - StatiCrypt protects the website interface only. GitHub Release asset URLs are public to anyone who has them.
 - Put only already-encrypted archives (for example, 7z files using AES-256 and encrypted filenames) in the release if the contents must remain private. Use a strong archive password, preferably different from the website password.
 - GitHub Releases are distribution hosting, not private authenticated storage. Anyone who obtains an asset URL can download the encrypted archive.
-- The website discovers assets through the public GitHub Releases API. GitHub's unauthenticated API rate limit can occasionally affect loading.
+- The website receives its repository and release configuration as an inline JavaScript configuration file generated during deployment. It discovers assets through the public GitHub Releases API. GitHub's unauthenticated API rate limit can occasionally affect loading.
 
 ## 1. Create the GitHub repository and Pages site
 

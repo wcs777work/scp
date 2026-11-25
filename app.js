@@ -87,10 +87,17 @@ $("#search").addEventListener("input", render);
 async function loadFiles() {
   $("#list").innerHTML = '<div class="empty">Loading release files…</div>';
   try {
-    const configResponse = await fetch("config.json", { cache: "no-store" });
-    if (!configResponse.ok)
-      throw new Error("Could not load site configuration.");
-    const config = await configResponse.json();
+    const config = window.SITE_CONFIG;
+    if (
+      !config ||
+      typeof config.repository !== "string" ||
+      !config.repository.includes("/") ||
+      !config.releaseTag
+    ) {
+      throw new Error(
+        "Site configuration is missing or invalid. Please redeploy the website using the updated GitHub Actions workflow.",
+      );
+    }
     const owner = config.repository.split("/")[0];
     const repo = config.repository.split("/")[1];
     const api = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=100`;
