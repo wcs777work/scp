@@ -1,0 +1,26 @@
+[
+  {
+    "path": "bar/file1.txt",
+    "name": "file1.txt",
+    "size": 7,
+    "url": "share/bar/file1.txt"
+  },
+  {
+    "path": "bar/file2.txt",
+    "name": "file2.txt",
+    "size": 7,
+    "url": "share/bar/file2.txt"
+  },
+  {
+    "path": "foo/file1.txt",
+    "name": "file1.txt",
+    "size": 7,
+    "url": "share/foo/file1.txt"
+  },
+  {
+    "path": "foo/file2.txt",
+    "name": "file2.txt",
+    "size": 7,
+    "url": "share/foo/file2.txt"
+  }
+]

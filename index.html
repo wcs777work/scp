@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Shared files</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header>
+        <h1>SCP Share</h1>
+        <p class="muted">Navegação e download de arquivos</p>
+      </header>
+      <section class="toolbar">
+        <input
+          id="search"
+          placeholder="Procurar arquivos e pastas…"
+          aria-label="Search"
+        /><button id="up" disabled>↑ Pasta superior</button>
+      </section>
+      <div id="crumb" class="crumb"></div>
+      <div id="list" class="list"><p>Carregandos arquivos…</p></div>
+      <footer id="foot"></footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
