@@ -1,39 +1,83 @@
 name: Build and deploy GitHub Pages
+
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
+
 permissions:
   contents: read
-  pages: write
-  id-token: write
+
 concurrency:
   group: pages
   cancel-in-progress: true
+
 jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build file index
+        run: node build-manifest.mjs
+
+      - name: Prepare site files
+        run: |
+          mkdir -p _site
+          cp index.html style.css app.js files.json _site/
+          cp -r share _site/share
+
+      - name: Install StatiCrypt
+        run: npm install --global staticrypt
+
+      - name: Encrypt website entry page
+        env:
+          STATICRYPT_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: |
+          staticrypt _site/index.html \
+            --salt "${{ secrets.STATICRYPT_SALT }}" \
+            -d _encrypted
+
+          cp _encrypted/index.html _site/index.html
+
+      - name: Verify build output
+        run: |
+          test -f _site/index.html
+          test -f _site/files.json
+          test -f _site/app.js
+          test -f _site/style.css
+          echo "Build output verified:"
+          ls -la _site
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
   deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Build file index
-        run: node build-manifest.mjs
-      - name: Prepare site files
-        run: mkdir -p _site && cp index.html style.css app.js files.json _site/ && cp -r share _site/share
-      - name: Install StatiCrypt CLI
-        run: npm install --global staticrypt
-      - name: Encrypt index with StatiCrypt
-        env:
-          STATICRYPT_PASSWORD: ${{ secrets.SITE_PASSWORD }}
-        run: staticrypt _site/index.html --salt "${{ secrets.STATICRYPT_SALT }}" -d _encrypted && cp _encrypted/index.html _site/index.html
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
